@@ -16,15 +16,18 @@ const STEPS = [
 ];
 
 const HIGHLIGHTS = [
-  { label: "Todo registrado", text: "Cada turno y cada cliente queda guardado en un historial propio." },
-  { label: "Respuestas automáticas", text: "Confirmación y recordatorio sin que nadie tenga que escribir a mano." },
-  { label: "Panel propio", text: "Bloqueá horarios, cancelá turnos y mirá la ocupación de cada cancha." },
+  { label: "Todo registrado", text: "Cada turno y cada cliente queda guardado en un historial propio.", color: "text-ember-300" },
+  { label: "Respuestas automáticas", text: "Confirmación y recordatorio sin que nadie tenga que escribir a mano.", color: "text-teal-300" },
+  { label: "Panel propio", text: "Bloqueá horarios, cancelá turnos y mirá la ocupación de cada cancha.", color: "text-gold-400" },
 ];
+
+const STEP_COLORS = ["text-ember-400/80", "text-teal-400/80", "text-gold-400/80"];
 
 export default function HowItWorksSection() {
   return (
-    <section id="como-funciona" className="relative bg-court-950 px-6 py-24">
-      <div className="mx-auto max-w-6xl">
+    <section id="como-funciona" className="relative overflow-hidden bg-court-950 px-6 py-24">
+      <div className="pointer-events-none absolute left-1/2 top-0 h-72 w-[600px] -translate-x-1/2 rounded-full bg-teal-500/[0.06] blur-3xl" />
+      <div className="relative mx-auto max-w-6xl">
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -50,7 +53,7 @@ export default function HowItWorksSection() {
               transition={{ duration: 0.6, delay: i * 0.12 }}
               className="rounded-2xl border border-cream-100/10 bg-court-850 p-7"
             >
-              <span className="font-display text-4xl text-ember-500/70">
+              <span className={`font-display text-4xl ${STEP_COLORS[i % STEP_COLORS.length]}`}>
                 0{i + 1}
               </span>
               <h3 className="mt-3 text-lg font-semibold text-cream-100">{step.title}</h3>
@@ -62,7 +65,7 @@ export default function HowItWorksSection() {
         <div className="mt-8 grid gap-4 rounded-2xl border border-ember-400/20 bg-ember-500/[0.06] p-7 sm:grid-cols-3">
           {HIGHLIGHTS.map((h) => (
             <div key={h.label}>
-              <p className="text-sm font-semibold text-ember-300">{h.label}</p>
+              <p className={`text-sm font-semibold ${h.color}`}>{h.label}</p>
               <p className="mt-1 text-sm text-cream-200/70">{h.text}</p>
             </div>
           ))}

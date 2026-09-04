@@ -140,10 +140,12 @@ function AdminDashboard({ onLogout }) {
 
         {/* stats rápidas */}
         <div className="mb-8 grid gap-4 sm:grid-cols-2">
-          {totalsByCourt.map(({ court, count }) => (
+          {totalsByCourt.map(({ court, count }, i) => (
             <div key={court.id} className="rounded-2xl border border-cream-100/10 bg-court-850 p-5">
               <p className="text-sm text-cream-200/60">{court.name}</p>
-              <p className="font-display text-4xl text-ember-400">{count}</p>
+              <p className={`font-display text-4xl ${i % 2 === 0 ? "text-ember-400" : "text-teal-300"}`}>
+                {count}
+              </p>
               <p className="text-xs text-cream-200/40">reservas activas totales</p>
             </div>
           ))}

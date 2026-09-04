@@ -21,11 +21,21 @@ const PERIODS = [
   { label: "Noche", test: (h) => h >= 19 || h < 5 },
 ];
 
+const COURT_TAB_ACTIVE = [
+  "border-ember-400 bg-ember-500/15 text-ember-300",
+  "border-teal-400 bg-teal-500/15 text-teal-300",
+];
+
 function groupByPeriod(slotList) {
   return PERIODS.map((period) => ({
     ...period,
     items: slotList.filter(({ time }) => period.test(Number(time.slice(0, 2)))),
   })).filter((group) => group.items.length > 0);
+}
+
+function formatDate(iso) {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 export default function BookingWidget() {
@@ -34,7 +44,8 @@ export default function BookingWidget() {
   const [date, setDate] = useState(todayISO());
   const [slot, setSlot] = useState(null);
   const [form, setForm] = useState({ name: "", phone: "", email: "" });
-  const [result, setResult] = useState(null); // { ok, error } | null
+  const [step, setStep] = useState("form"); // "form" | "preview" | "done"
+  const [result, setResult] = useState(null); // { ok, error, reservation? } | null
   const [submitting, setSubmitting] = useState(false);
 
   const slotList = useMemo(
@@ -44,28 +55,44 @@ export default function BookingWidget() {
   const groups = useMemo(() => groupByPeriod(slotList), [slotList]);
 
   const selectedCourt = courts.find((c) => c.id === courtId);
-  const courtNumber = courts.findIndex((c) => c.id === courtId) + 1;
+  const courtIndex = courts.findIndex((c) => c.id === courtId);
+  const courtNumber = courtIndex + 1;
+
+  function resetAll() {
+    setSlot(null);
+    setForm({ name: "", phone: "", email: "" });
+    setStep("form");
+    setResult(null);
+  }
 
   function chooseSlot(time, status) {
     if (status !== "libre") return;
     setSlot(time);
+    setStep("form");
     setResult(null);
   }
 
-  function handleSubmit(e) {
+  function handleReview(e) {
     e.preventDefault();
     if (!slot) return;
+    setStep("preview");
+  }
+
+  function handleConfirm() {
     setSubmitting(true);
     // simulamos una pequeña latencia de red, como tendría el backend real
     setTimeout(() => {
       const res = createReservation({ courtId, date, time: slot, ...form });
-      setResult(res);
       setSubmitting(false);
+      setResult(res);
       if (res.ok) {
-        setForm({ name: "", phone: "", email: "" });
+        setStep("done");
+      } else {
+        // el horario se ocupó justo antes de confirmar — volvemos a elegir
+        setStep("form");
         setSlot(null);
       }
-    }, 400);
+    }, 500);
   }
 
   return (
@@ -87,18 +114,19 @@ export default function BookingWidget() {
         <div className="rounded-2xl border border-cream-100/10 bg-court-850 p-6 sm:p-8">
           {/* selector de cancha */}
           <div className="mb-6 flex gap-2">
-            {courts.map((c) => (
+            {courts.map((c, i) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => {
                   setCourtId(c.id);
                   setSlot(null);
+                  setStep("form");
                   setResult(null);
                 }}
                 className={`flex-1 rounded-xl border px-4 py-3 text-sm font-semibold transition ${
                   c.id === courtId
-                    ? "border-ember-400 bg-ember-500/15 text-ember-300"
+                    ? COURT_TAB_ACTIVE[i % COURT_TAB_ACTIVE.length]
                     : "border-cream-100/10 text-cream-200/60 hover:border-cream-100/25"
                 }`}
               >
@@ -127,160 +155,243 @@ export default function BookingWidget() {
 
             {/* columna derecha: fecha + horarios + formulario */}
             <div>
-              <div className="mb-6">
-                <label className="mb-2 block text-sm font-medium text-cream-200/70">
-                  Fecha
-                </label>
-                <input
-                  type="date"
-                  value={date}
-                  min={todayISO()}
-                  onChange={(e) => {
-                    setDate(e.target.value);
-                    setSlot(null);
-                    setResult(null);
-                  }}
-                  className="w-full rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-cream-100 outline-none focus:border-ember-400/60 sm:w-56"
+              {step === "done" && result?.ok ? (
+                <ConfirmationPanel
+                  reservation={result.reservation}
+                  courtName={selectedCourt.name}
+                  onReset={resetAll}
                 />
-              </div>
-
-              <div className="mb-2">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-cream-200/70">
-                    Horarios · {selectedCourt.name}
-                  </p>
-                  <div className="flex gap-4 text-xs text-cream-200/50">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-court-950 ring-1 ring-cream-100/25" /> Libre
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-court-700/60" /> Reservado
-                    </span>
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full bg-court-700/30" /> Bloqueado
-                    </span>
+              ) : (
+                <>
+                  <div className="mb-6">
+                    <label className="mb-2 block text-sm font-medium text-cream-200/70">
+                      Fecha
+                    </label>
+                    <input
+                      type="date"
+                      value={date}
+                      min={todayISO()}
+                      onChange={(e) => {
+                        setDate(e.target.value);
+                        setSlot(null);
+                        setStep("form");
+                        setResult(null);
+                      }}
+                      className="w-full rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-cream-100 outline-none focus:border-ember-400/60 sm:w-56"
+                    />
                   </div>
-                </div>
 
-                <AnimatePresence mode="wait">
-                  <motion.div
-                    key={`${courtId}-${date}`}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.25 }}
-                    className="space-y-4"
-                  >
-                    {groups.map((group) => (
-                      <div key={group.label}>
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-cream-200/40">
-                          {group.label}
-                        </p>
-                        <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
-                          {group.items.map(({ time, status, block }) => (
-                            <button
-                              key={time}
-                              type="button"
-                              title={
-                                status === "bloqueada"
-                                  ? `Bloqueado${block?.reason ? `: ${block.reason}` : ""}`
-                                  : status === "reservada"
-                                    ? "Horario ya reservado"
-                                    : "Horario disponible"
-                              }
-                              onClick={() => chooseSlot(time, status)}
-                              disabled={status !== "libre"}
-                              className={`relative rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
-                                STATUS_STYLES[status]
-                              } ${slot === time ? "!border-ember-400 !bg-ember-500 !text-court-950" : ""}`}
-                            >
-                              {time}
-                              {status === "bloqueada" && (
-                                <span className="absolute right-1.5 top-1.5 text-[10px] opacity-60">
-                                  🔒
-                                </span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
+                  <div className="mb-2">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-cream-200/70">
+                        Horarios · {selectedCourt.name}
+                      </p>
+                      <div className="flex gap-4 text-xs text-cream-200/50">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-court-950 ring-1 ring-cream-100/25" /> Libre
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-court-700/60" /> Reservado
+                        </span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="h-2.5 w-2.5 rounded-full bg-court-700/30" /> Bloqueado
+                        </span>
                       </div>
-                    ))}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
-
-              {/* formulario de datos */}
-              <AnimatePresence mode="wait">
-                {slot && (
-                  <motion.form
-                    key={slot}
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
-                    onSubmit={handleSubmit}
-                    className="mt-6 overflow-hidden border-t border-cream-100/10 pt-6"
-                  >
-                    <p className="mb-4 text-sm text-cream-200/70">
-                      Confirmando <span className="font-semibold text-cream-100">{selectedCourt.name}</span> el{" "}
-                      <span className="font-semibold text-cream-100">{date}</span> a las{" "}
-                      <span className="font-semibold text-ember-400">{slot}</span>
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <input
-                        required
-                        placeholder="Nombre y apellido"
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                        className="rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-sm text-cream-100 outline-none placeholder:text-cream-200/30 focus:border-ember-400/60"
-                      />
-                      <input
-                        required
-                        type="tel"
-                        placeholder="Teléfono"
-                        value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                        className="rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-sm text-cream-100 outline-none placeholder:text-cream-200/30 focus:border-ember-400/60"
-                      />
-                      <input
-                        required
-                        type="email"
-                        placeholder="Email"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        className="rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-sm text-cream-100 outline-none placeholder:text-cream-200/30 focus:border-ember-400/60"
-                      />
                     </div>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="mt-4 w-full rounded-xl bg-ember-500 py-3.5 text-sm font-semibold text-court-950 transition hover:bg-ember-400 disabled:opacity-60 sm:w-auto sm:px-8"
-                    >
-                      {submitting ? "Confirmando…" : "Confirmar turno"}
-                    </button>
-                  </motion.form>
-                )}
-              </AnimatePresence>
 
-              {result && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`mt-5 rounded-xl border px-4 py-3 text-sm ${
-                    result.ok
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                      : "border-red-500/30 bg-red-500/10 text-red-300"
-                  }`}
-                >
-                  {result.ok
-                    ? "¡Turno confirmado! Te va a llegar un email de confirmación (simulado en esta demo)."
-                    : result.error}
-                </motion.div>
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={`${courtId}-${date}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className="space-y-4"
+                      >
+                        {groups.map((group) => (
+                          <div key={group.label}>
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-cream-200/40">
+                              {group.label}
+                            </p>
+                            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4">
+                              {group.items.map(({ time, status, block }) => (
+                                <button
+                                  key={time}
+                                  type="button"
+                                  title={
+                                    status === "bloqueada"
+                                      ? `Bloqueado${block?.reason ? `: ${block.reason}` : ""}`
+                                      : status === "reservada"
+                                        ? "Horario ya reservado"
+                                        : "Horario disponible"
+                                  }
+                                  onClick={() => chooseSlot(time, status)}
+                                  disabled={status !== "libre"}
+                                  className={`relative rounded-lg border px-3 py-2.5 text-sm font-medium transition ${
+                                    STATUS_STYLES[status]
+                                  } ${slot === time ? "!border-ember-400 !bg-ember-500 !text-court-950" : ""}`}
+                                >
+                                  {time}
+                                  {status === "bloqueada" && (
+                                    <span className="absolute right-1.5 top-1.5 text-[10px] opacity-60">
+                                      🔒
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+
+                  {/* paso 1: formulario de datos */}
+                  <AnimatePresence mode="wait">
+                    {slot && step === "form" && (
+                      <motion.form
+                        key={slot}
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                        onSubmit={handleReview}
+                        className="mt-6 overflow-hidden border-t border-cream-100/10 pt-6"
+                      >
+                        <p className="mb-4 text-sm text-cream-200/70">
+                          Reservando <span className="font-semibold text-cream-100">{selectedCourt.name}</span> el{" "}
+                          <span className="font-semibold text-cream-100">{formatDate(date)}</span> a las{" "}
+                          <span className="font-semibold text-ember-400">{slot}</span>
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <input
+                            required
+                            placeholder="Nombre y apellido"
+                            value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })}
+                            className="rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-sm text-cream-100 outline-none placeholder:text-cream-200/30 focus:border-ember-400/60"
+                          />
+                          <input
+                            required
+                            type="tel"
+                            placeholder="Teléfono"
+                            value={form.phone}
+                            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                            className="rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-sm text-cream-100 outline-none placeholder:text-cream-200/30 focus:border-ember-400/60"
+                          />
+                          <input
+                            required
+                            type="email"
+                            placeholder="Email"
+                            value={form.email}
+                            onChange={(e) => setForm({ ...form, email: e.target.value })}
+                            className="rounded-xl border border-cream-100/15 bg-court-950 px-4 py-3 text-sm text-cream-100 outline-none placeholder:text-cream-200/30 focus:border-ember-400/60"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="mt-4 w-full rounded-xl bg-ember-500 py-3.5 text-sm font-semibold text-court-950 transition hover:bg-ember-400 sm:w-auto sm:px-8"
+                        >
+                          Revisar reserva
+                        </button>
+                      </motion.form>
+                    )}
+                  </AnimatePresence>
+
+                  {/* paso 2: previsualización antes de confirmar de verdad */}
+                  <AnimatePresence mode="wait">
+                    {slot && step === "preview" && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="mt-6 overflow-hidden border-t border-cream-100/10 pt-6"
+                      >
+                        <p className="mb-3 text-sm font-medium text-cream-200/70">
+                          Revisá que esté todo bien antes de confirmar
+                        </p>
+                        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-ember-400/20 bg-ember-500/[0.05] p-4 text-sm sm:grid-cols-3">
+                          <PreviewField label="Cancha" value={selectedCourt.name} />
+                          <PreviewField label="Fecha" value={formatDate(date)} />
+                          <PreviewField label="Horario" value={slot} />
+                          <PreviewField label="Nombre" value={form.name} />
+                          <PreviewField label="Teléfono" value={form.phone} />
+                          <PreviewField label="Email" value={form.email} />
+                        </dl>
+                        <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row">
+                          <button
+                            type="button"
+                            onClick={() => setStep("form")}
+                            className="rounded-xl border border-cream-100/15 px-6 py-3.5 text-sm font-medium text-cream-200/80 transition hover:border-cream-100/30"
+                          >
+                            Editar datos
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleConfirm}
+                            disabled={submitting}
+                            className="flex-1 rounded-xl bg-ember-500 py-3.5 text-sm font-semibold text-court-950 transition hover:bg-ember-400 disabled:opacity-60"
+                          >
+                            {submitting ? "Confirmando…" : "Confirmar reserva"}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {result && !result.ok && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+                    >
+                      {result.error}
+                    </motion.div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function PreviewField({ label, value }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide text-cream-200/45">{label}</dt>
+      <dd className="mt-0.5 font-medium text-cream-100">{value}</dd>
+    </div>
+  );
+}
+
+function ConfirmationPanel({ reservation, courtName, onReset }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex h-full flex-col items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/[0.06] px-6 py-10 text-center"
+    >
+      <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-2xl">
+        ✅
+      </span>
+      <p className="text-lg font-semibold text-cream-100">¡Turno confirmado!</p>
+      <p className="mt-1 text-sm text-cream-200/70">
+        {courtName} · {formatDate(reservation.date)} a las {reservation.time}
+      </p>
+      <p className="mt-3 max-w-sm text-sm text-emerald-300">
+        Te va a llegar un email de confirmación a {reservation.email} (simulado en esta demo).
+      </p>
+      <button
+        type="button"
+        onClick={onReset}
+        className="mt-6 rounded-xl border border-cream-100/15 px-6 py-3 text-sm font-medium text-cream-100/90 transition hover:border-cream-100/30 hover:bg-cream-100/5"
+      >
+        Reservar otro turno
+      </button>
+    </motion.div>
   );
 }

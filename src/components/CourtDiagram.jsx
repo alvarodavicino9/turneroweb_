@@ -7,7 +7,13 @@ import { motion } from "framer-motion";
 // que está reservando: dónde juega, no solo un horario en una
 // grilla de texto.
 // ─────────────────────────────────────────────────────────────
+const ACCENTS = {
+  1: { rim: "#ff9a3d", dot: "#ff7a1a", text: "#ffb974", label: "text-ember-400" },
+  2: { rim: "#2dd4bf", dot: "#14b8a6", text: "#7dede0", label: "text-teal-400" },
+};
+
 export default function CourtDiagram({ courtNumber = 1, label = "Cancha" }) {
+  const accent = ACCENTS[courtNumber] ?? ACCENTS[1];
   return (
     <div className="relative overflow-hidden rounded-2xl border border-cream-100/10 bg-court-950">
       {/* piso de madera */}
@@ -55,12 +61,12 @@ export default function CourtDiagram({ courtNumber = 1, label = "Cancha" }) {
           <path d="M 255 20 A 145 145 0 0 1 255 155" />
           <path d="M 45 155 A 145 145 0 0 0 150 190 A 145 145 0 0 0 255 155" />
         </g>
-        <line x1="115" y1="34" x2="185" y2="34" stroke="#ff9a3d" strokeWidth="3" />
+        <line x1="115" y1="34" x2="185" y2="34" stroke={accent.rim} strokeWidth="3" />
         <motion.circle
           cx="150"
           cy="46"
           r="5.5"
-          fill="#ff7a1a"
+          fill={accent.dot}
           animate={{ cy: [46, 42, 46] }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
         />
@@ -73,32 +79,32 @@ export default function CourtDiagram({ courtNumber = 1, label = "Cancha" }) {
           <path d="M 255 540 A 145 145 0 0 0 255 405" />
           <path d="M 45 405 A 145 145 0 0 1 150 370 A 145 145 0 0 1 255 405" />
         </g>
-        <line x1="115" y1="526" x2="185" y2="526" stroke="#ff9a3d" strokeWidth="3" />
+        <line x1="115" y1="526" x2="185" y2="526" stroke={accent.rim} strokeWidth="3" />
         <motion.circle
           cx="150"
           cy="514"
           r="5.5"
-          fill="#ff7a1a"
+          fill={accent.dot}
           animate={{ cy: [514, 518, 514] }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.4 }}
         />
 
         {/* marca de número de cancha en el centro */}
-        <circle cx="150" cy="280" r="20" fill="#0a0704" stroke="#ff9a3d" strokeOpacity="0.6" strokeWidth="1.5" />
+        <circle cx="150" cy="280" r="20" fill="#0d0805" stroke={accent.rim} strokeOpacity="0.6" strokeWidth="1.5" />
         <text
           x="150"
           y="288"
           textAnchor="middle"
           fontSize="18"
           fontFamily="'Bebas Neue', sans-serif"
-          fill="#ffb974"
+          fill={accent.text}
         >
           {courtNumber}
         </text>
       </svg>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-court-950 to-transparent px-5 pb-4 pt-10">
-        <p className="text-xs font-semibold uppercase tracking-widest text-ember-400">
+        <p className={`text-xs font-semibold uppercase tracking-widest ${accent.label}`}>
           Vista de la cancha
         </p>
         <p className="text-sm text-cream-200/60">{label} · fotos reales próximamente</p>

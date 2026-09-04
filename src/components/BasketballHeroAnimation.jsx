@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion, useAnimationControls, useReducedMotion } from "framer-motion";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 
 // ─────────────────────────────────────────────────────────────
@@ -13,6 +14,11 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 // y la escena entre completa. El "timeline" (fracciones T /
 // squash / rotación / opacidad) es el mismo para las dos: solo
 // cambian las coordenadas x/y de cada layout.
+//
+// En celular, además, es interactiva: deslizás el dedo desde la
+// pelota hacia el aro y la tira de verdad (usa la misma "física"
+// pero arrancando desde donde tocaste), en vez de solo mirar el
+// loop automático.
 // ─────────────────────────────────────────────────────────────
 
 const DURATION = 4.6;
@@ -31,6 +37,21 @@ const NET_TIMES = [0, 0.55, 0.59, 0.63, 0.68, 0.75, 1];
 const NET_SKEW = [0, 0, 10, -6, 3, 0, 0];
 const NET_SCALE_Y = [1, 1, 0.9, 1.05, 0.98, 1, 1];
 
+const IDLE_BALL_TRANSITION = {
+  duration: DURATION,
+  repeat: Infinity,
+  repeatDelay: REPEAT_DELAY,
+  times: T,
+  ease: "easeInOut",
+};
+const IDLE_NET_TRANSITION = {
+  duration: DURATION,
+  repeat: Infinity,
+  repeatDelay: REPEAT_DELAY,
+  times: NET_TIMES,
+  ease: "easeOut",
+};
+
 // rastro fantasma detrás de la pelota — dos copias con delay,
 // más chicas y transparentes, simulan motion blur sin filtros caros
 const TRAILS = [
@@ -46,7 +67,6 @@ const LAYOUTS = {
     ground: 430,
     glowR: 140,
     hoop: { cx: 600, cy: 150, rimRx: 42, rimRy: 9 },
-    backboard: { x: 640, y: 40, w: 14, h: 130 },
     court: { lineX2: 800, circleCx: 180, circleR: 70 },
     ballX: [50, 110, 340, 540, 605, 605, 585, 600, 592, 598, 50],
     ballY: [378, 320, 55, 95, 150, 430, 300, 430, 375, 430, 378],
@@ -60,17 +80,35 @@ const LAYOUTS = {
     ground: 349,
     glowR: 92,
     hoop: { cx: 150, cy: 68, rimRx: 27, rimRy: 6 },
-    backboard: { x: 136, y: 14, w: 9, h: 52 },
     court: { lineX2: 300 },
     ballX: [43, 67, 150, 150, 150, 150, 133, 156, 139, 150, 43],
     ballY: [297, 246, 17, 39, 68, 349, 246, 349, 317, 349, 297],
   },
 };
 
+function idleBallAnim(ballX, ballY) {
+  return { x: ballX, y: ballY, scaleX: BALL_SCALE_X, scaleY: BALL_SCALE_Y, rotate: BALL_ROTATE, opacity: BALL_OPACITY };
+}
+function idleShadowAnim(ballX) {
+  return { cx: ballX, opacity: SHADOW_OPACITY, scaleX: SHADOW_SCALE };
+}
+const idleNetAnim = { skewX: NET_SKEW, scaleY: NET_SCALE_Y };
+
+function BallMarks() {
+  return (
+    <>
+      <path d="M -24 0 A 24 24 0 0 1 24 0" fill="none" stroke="#3a2010" strokeOpacity="0.55" strokeWidth="1.6" />
+      <path d="M -24 0 A 24 24 0 0 0 24 0" fill="none" stroke="#3a2010" strokeOpacity="0.55" strokeWidth="1.6" />
+      <path d="M 0 -24 L 0 24" stroke="#3a2010" strokeOpacity="0.55" strokeWidth="1.6" />
+      <path d="M -17 -17 L 17 17" stroke="#3a2010" strokeOpacity="0.35" strokeWidth="1.2" />
+      <path d="M 17 -17 L -17 17" stroke="#3a2010" strokeOpacity="0.35" strokeWidth="1.2" />
+      <ellipse cx="-8" cy="-9" rx="7" ry="4.5" fill="#fff" opacity="0.4" />
+    </>
+  );
+}
+
 function Ball({ trail, ballX, ballY }) {
-  const opacity = trail
-    ? BALL_OPACITY.map((v) => v * trail.opacity)
-    : BALL_OPACITY;
+  const opacity = trail ? BALL_OPACITY.map((v) => v * trail.opacity) : BALL_OPACITY;
   const scaleBoost = trail?.scale ?? 1;
 
   return (
@@ -83,27 +121,61 @@ function Ball({ trail, ballX, ballY }) {
         rotate: BALL_ROTATE,
         opacity,
       }}
-      transition={{
-        duration: DURATION,
-        repeat: Infinity,
-        repeatDelay: REPEAT_DELAY,
-        times: T,
-        ease: "easeInOut",
-        delay: trail?.delay ?? 0,
-      }}
+      transition={{ ...IDLE_BALL_TRANSITION, delay: trail?.delay ?? 0 }}
     >
       <circle r="24" fill={trail ? "#ff7a1a" : "url(#ballGradient)"} />
-      {!trail && (
-        <>
-          <path d="M -24 0 A 24 24 0 0 1 24 0" fill="none" stroke="#3a2010" strokeOpacity="0.55" strokeWidth="1.6" />
-          <path d="M -24 0 A 24 24 0 0 0 24 0" fill="none" stroke="#3a2010" strokeOpacity="0.55" strokeWidth="1.6" />
-          <path d="M 0 -24 L 0 24" stroke="#3a2010" strokeOpacity="0.55" strokeWidth="1.6" />
-          <path d="M -17 -17 L 17 17" stroke="#3a2010" strokeOpacity="0.35" strokeWidth="1.2" />
-          <path d="M 17 -17 L -17 17" stroke="#3a2010" strokeOpacity="0.35" strokeWidth="1.2" />
-          <ellipse cx="-8" cy="-9" rx="7" ry="4.5" fill="#fff" opacity="0.4" />
-        </>
-      )}
+      {!trail && <BallMarks />}
     </motion.g>
+  );
+}
+
+function Hoop({ hoop, netControls, netAnim, netTransition }) {
+  const boardW = hoop.rimRx * 2.2;
+  const boardH = boardW / 1.7;
+  const boardX = hoop.cx - boardW / 2;
+  const boardY = hoop.cy - boardH - hoop.rimRy * 1.6;
+  const squareW = boardW * 0.38;
+  const squareH = boardH * 0.52;
+  const squareX = hoop.cx - squareW / 2;
+  const squareY = boardY + boardH - squareH - boardH * 0.1;
+  const poleW = Math.max(boardW * 0.07, 3);
+  const poleX = hoop.cx - poleW / 2;
+
+  return (
+    <>
+      {/* poste de soporte, detrás del tablero */}
+      <rect x={poleX} y="0" width={poleW} height={boardY + 4} fill="#2a1c10" opacity="0.6" />
+
+      {/* tablero */}
+      <rect x={boardX} y={boardY} width={boardW} height={boardH} rx={boardW * 0.05} fill="url(#boardGradient)" stroke="#f2e7d5" strokeOpacity="0.6" strokeWidth="2" />
+      <rect x={squareX} y={squareY} width={squareW} height={squareH} fill="none" stroke="#ff9a3d" strokeOpacity="0.75" strokeWidth="1.6" />
+
+      {/* aro — doble trazo para dar volumen metálico */}
+      <ellipse cx={hoop.cx} cy={hoop.cy} rx={hoop.rimRx} ry={hoop.rimRy} fill="none" stroke="#7a2c05" strokeWidth="8" opacity="0.5" />
+      <ellipse cx={hoop.cx} cy={hoop.cy} rx={hoop.rimRx} ry={hoop.rimRy} fill="none" stroke="url(#rimGradient)" strokeWidth="5.5" />
+
+      {/* red */}
+      <motion.g
+        animate={netControls ?? netAnim}
+        transition={netControls ? undefined : netTransition}
+        style={{ transformOrigin: `${hoop.cx}px ${hoop.cy + 2}px` }}
+      >
+        {[-30, -18, -6, 6, 18, 30].map((offset) => (
+          <line
+            key={offset}
+            x1={hoop.cx + offset * 0.9 * (hoop.rimRx / 42)}
+            y1={hoop.cy + 4}
+            x2={hoop.cx + offset * 0.35 * (hoop.rimRx / 42)}
+            y2={hoop.cy + 53}
+            stroke="#f2e7d5"
+            strokeOpacity="0.55"
+            strokeWidth="1.5"
+          />
+        ))}
+        <path d={`M ${hoop.cx - 28} ${hoop.cy + 10} Q ${hoop.cx} ${hoop.cy + 26} ${hoop.cx + 28} ${hoop.cy + 10}`} fill="none" stroke="#f2e7d5" strokeOpacity="0.4" />
+        <path d={`M ${hoop.cx - 22} ${hoop.cy + 33} Q ${hoop.cx} ${hoop.cy + 46} ${hoop.cx + 22} ${hoop.cy + 33}`} fill="none" stroke="#f2e7d5" strokeOpacity="0.4" />
+      </motion.g>
+    </>
   );
 }
 
@@ -111,10 +183,80 @@ export default function BasketballHeroAnimation({ className = "" }) {
   const reduceMotion = useReducedMotion();
   const isMobile = useMediaQuery("(max-width: 639px)");
   const layout = isMobile ? LAYOUTS.mobile : LAYOUTS.desktop;
-  const { hoop, backboard, court, ground, ballX, ballY } = layout;
+  const { hoop, court, ground, ballX, ballY } = layout;
+  const interactive = isMobile && !reduceMotion;
+
+  const wrapRef = useRef(null);
+  const pointerStart = useRef(null);
+  const shootingRef = useRef(false);
+  const [showHint, setShowHint] = useState(true);
+
+  const ballControls = useAnimationControls();
+  const shadowControls = useAnimationControls();
+  const netControls = useAnimationControls();
+
+  useEffect(() => {
+    if (!interactive) return;
+    ballControls.start({ ...idleBallAnim(ballX, ballY), transition: IDLE_BALL_TRANSITION });
+    shadowControls.start({ ...idleShadowAnim(ballX), transition: IDLE_BALL_TRANSITION });
+    netControls.start({ ...idleNetAnim, transition: IDLE_NET_TRANSITION });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interactive, isMobile]);
+
+  function toViewBoxPoint(e) {
+    const rect = wrapRef.current.getBoundingClientRect();
+    const [, , vbW, vbH] = layout.viewBox.split(" ").map(Number);
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    return { x: relX * vbW, y: relY * vbH };
+  }
+
+  async function shoot(startX, startY) {
+    if (shootingRef.current) return;
+    shootingRef.current = true;
+    setShowHint(false);
+
+    const shotX = [startX, (startX + ballX[2]) / 2, ...ballX.slice(2)];
+    const shotY = [startY, (startY + ballY[2]) / 2, ...ballY.slice(2)];
+    const shotOpacity = [1, ...BALL_OPACITY.slice(1)];
+    const quickTransition = { duration: DURATION * 0.82, times: T, ease: "easeInOut" };
+
+    await Promise.all([
+      ballControls.start({
+        x: shotX,
+        y: shotY,
+        scaleX: BALL_SCALE_X,
+        scaleY: BALL_SCALE_Y,
+        rotate: BALL_ROTATE,
+        opacity: shotOpacity,
+        transition: quickTransition,
+      }),
+      shadowControls.start({ cx: shotX, opacity: SHADOW_OPACITY, scaleX: SHADOW_SCALE, transition: quickTransition }),
+      netControls.start({ ...idleNetAnim, transition: { ...quickTransition, times: NET_TIMES, ease: "easeOut" } }),
+    ]);
+
+    await new Promise((resolve) => setTimeout(resolve, REPEAT_DELAY * 1000));
+    shootingRef.current = false;
+    ballControls.start({ ...idleBallAnim(ballX, ballY), transition: IDLE_BALL_TRANSITION });
+    shadowControls.start({ ...idleShadowAnim(ballX), transition: IDLE_BALL_TRANSITION });
+    netControls.start({ ...idleNetAnim, transition: IDLE_NET_TRANSITION });
+  }
+
+  function handlePointerDown(e) {
+    pointerStart.current = toViewBoxPoint(e);
+  }
+
+  function handlePointerUp(e) {
+    if (!pointerStart.current) return;
+    const start = pointerStart.current;
+    const end = toViewBoxPoint(e);
+    pointerStart.current = null;
+    const dist = Math.hypot(end.x - start.x, end.y - start.y);
+    if (dist > 16) shoot(start.x, start.y);
+  }
 
   return (
-    <div className={`pointer-events-none select-none ${className}`}>
+    <div ref={wrapRef} className={`pointer-events-none relative select-none ${className}`}>
       <svg
         viewBox={layout.viewBox}
         preserveAspectRatio={layout.preserveAspectRatio}
@@ -133,8 +275,8 @@ export default function BasketballHeroAnimation({ className = "" }) {
             <stop offset="100%" stopColor="#c2450a" />
           </linearGradient>
           <linearGradient id="boardGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f2e7d5" stopOpacity="0.18" />
-            <stop offset="100%" stopColor="#f2e7d5" stopOpacity="0.04" />
+            <stop offset="0%" stopColor="#f2e7d5" stopOpacity="0.3" />
+            <stop offset="100%" stopColor="#f2e7d5" stopOpacity="0.1" />
           </linearGradient>
           <radialGradient id="glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#ff7a1a" stopOpacity="0.35" />
@@ -148,11 +290,7 @@ export default function BasketballHeroAnimation({ className = "" }) {
           cy={hoop.cy}
           r={layout.glowR}
           fill="url(#glow)"
-          animate={
-            reduceMotion
-              ? undefined
-              : { opacity: [0.5, 0.9, 0.5], scale: [1, 1.08, 1] }
-          }
+          animate={reduceMotion ? undefined : { opacity: [0.5, 0.9, 0.5], scale: [1, 1.08, 1] }}
           transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
           style={{ transformOrigin: `${hoop.cx}px ${hoop.cy}px` }}
         />
@@ -163,84 +301,44 @@ export default function BasketballHeroAnimation({ className = "" }) {
           <circle cx={court.circleCx} cy={ground} r={court.circleR} fill="none" stroke="#f2e7d5" strokeOpacity="0.08" strokeWidth="2" />
         ) : null}
 
-        {/* tablero */}
-        <rect x={backboard.x} y={backboard.y} width={backboard.w} height={backboard.h} fill="url(#boardGradient)" stroke="#f2e7d5" strokeOpacity="0.25" />
-
-        {/* aro — doble trazo para dar volumen metálico */}
-        <ellipse cx={hoop.cx} cy={hoop.cy} rx={hoop.rimRx} ry={hoop.rimRy} fill="none" stroke="#7a2c05" strokeWidth="8" opacity="0.5" />
-        <ellipse cx={hoop.cx} cy={hoop.cy} rx={hoop.rimRx} ry={hoop.rimRy} fill="none" stroke="url(#rimGradient)" strokeWidth="5.5" />
-
-        {/* red */}
-        <motion.g
-          animate={reduceMotion ? undefined : { skewX: NET_SKEW, scaleY: NET_SCALE_Y }}
-          transition={
-            reduceMotion
-              ? undefined
-              : {
-                  duration: DURATION,
-                  repeat: Infinity,
-                  repeatDelay: REPEAT_DELAY,
-                  times: NET_TIMES,
-                  ease: "easeOut",
-                }
-          }
-          style={{ transformOrigin: `${hoop.cx}px ${hoop.cy + 2}px` }}
-        >
-          {[-30, -18, -6, 6, 18, 30].map((offset) => (
-            <line
-              key={offset}
-              x1={hoop.cx + offset * 0.9 * (hoop.rimRx / 42)}
-              y1={hoop.cy + 4}
-              x2={hoop.cx + offset * 0.35 * (hoop.rimRx / 42)}
-              y2={hoop.cy + 53}
-              stroke="#f2e7d5"
-              strokeOpacity="0.55"
-              strokeWidth="1.5"
-            />
-          ))}
-          <path
-            d={`M ${hoop.cx - 28} ${hoop.cy + 10} Q ${hoop.cx} ${hoop.cy + 26} ${hoop.cx + 28} ${hoop.cy + 10}`}
-            fill="none"
-            stroke="#f2e7d5"
-            strokeOpacity="0.4"
-          />
-          <path
-            d={`M ${hoop.cx - 22} ${hoop.cy + 33} Q ${hoop.cx} ${hoop.cy + 46} ${hoop.cx + 22} ${hoop.cy + 33}`}
-            fill="none"
-            stroke="#f2e7d5"
-            strokeOpacity="0.4"
-          />
-        </motion.g>
+        {interactive ? (
+          <Hoop hoop={hoop} netControls={netControls} />
+        ) : (
+          <Hoop hoop={hoop} netAnim={reduceMotion ? undefined : idleNetAnim} netTransition={reduceMotion ? undefined : IDLE_NET_TRANSITION} />
+        )}
 
         {/* sombra de la pelota */}
-        <motion.ellipse
-          cy={ground + 2}
-          rx="26"
-          ry="7"
-          fill="#000"
-          animate={
-            reduceMotion
-              ? { opacity: 0.3 }
-              : { cx: ballX, opacity: SHADOW_OPACITY, scaleX: SHADOW_SCALE }
-          }
-          transition={
-            reduceMotion
-              ? undefined
-              : {
-                  duration: DURATION,
-                  repeat: Infinity,
-                  repeatDelay: REPEAT_DELAY,
-                  times: T,
-                  ease: "easeInOut",
-                }
-          }
-          style={{ transformOrigin: "center" }}
-        />
+        {interactive ? (
+          <motion.ellipse
+            cy={ground + 2}
+            rx="26"
+            ry="7"
+            fill="#000"
+            initial={{ cx: ballX[0], opacity: 0 }}
+            animate={shadowControls}
+            style={{ transformOrigin: "center" }}
+          />
+        ) : (
+          <motion.ellipse
+            cy={ground + 2}
+            rx="26"
+            ry="7"
+            fill="#000"
+            animate={reduceMotion ? { opacity: 0.3 } : idleShadowAnim(ballX)}
+            transition={reduceMotion ? undefined : IDLE_BALL_TRANSITION}
+            style={{ transformOrigin: "center" }}
+          />
+        )}
 
         {reduceMotion ? (
           <g transform={`translate(${hoop.cx}, ${hoop.cy})`}>
             <circle r="22" fill="url(#ballGradient)" />
           </g>
+        ) : interactive ? (
+          <motion.g initial={{ x: ballX[0], y: ballY[0], opacity: 0 }} animate={ballControls}>
+            <circle r="24" fill="url(#ballGradient)" />
+            <BallMarks />
+          </motion.g>
         ) : (
           <>
             {TRAILS.map((trail, i) => (
@@ -250,6 +348,28 @@ export default function BasketballHeroAnimation({ className = "" }) {
           </>
         )}
       </svg>
+
+      {interactive && (
+        <div
+          className="absolute inset-0"
+          style={{ touchAction: "none", pointerEvents: "auto" }}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+        />
+      )}
+
+      {interactive && showHint && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.9, 0.9, 0] }}
+          transition={{ duration: 5, times: [0, 0.15, 0.85, 1], delay: 1.6, repeat: Infinity, repeatDelay: 3 }}
+          className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center"
+        >
+          <span className="rounded-full bg-court-950/80 px-3 py-1.5 text-[11px] font-medium text-cream-200/80 backdrop-blur-sm">
+            👆 Deslizá la pelota hacia el aro
+          </span>
+        </motion.div>
+      )}
     </div>
   );
 }
