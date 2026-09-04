@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --color-court-950: #0a0704;
+  --color-court-900: #140d08;
+  --color-court-850: #1c130c;
+  --color-court-800: #241a10;
+  --color-court-700: #3a2814;
+  --color-ember-500: #ff7a1a;
+  --color-ember-400: #ff9a3d;
+  --color-ember-300: #ffb974;
+  --color-cream-100: #fdf6ec;
+  --color-cream-200: #f2e7d5;
+
+  --font-display: "Bebas Neue", "Oswald", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-court-950);
+  color: var(--color-cream-100);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+::selection {
+  background: var(--color-ember-500);
+  color: var(--color-court-950);
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+/* subtle grain / texture overlay used behind the hero */
+.grain-overlay {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.35'/></svg>");
+  mix-blend-mode: overlay;
+}
+
+@keyframes court-drift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 0 -600px;
+  }
+}
+
+.court-floor {
+  background-image: repeating-linear-gradient(
+    180deg,
+    rgba(242, 231, 213, 0.05) 0px,
+    rgba(242, 231, 213, 0.05) 1px,
+    transparent 1px,
+    transparent 60px
+  );
+  animation: court-drift 30s linear infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
